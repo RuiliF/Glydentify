@@ -23,7 +23,7 @@ glydentify_public/
 └── README.md             # This file
 ```
 
-## 🛠️ Installation
+## Installation
 
 1.  **Clone the repository:**
     ```bash
