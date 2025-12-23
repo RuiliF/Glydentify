@@ -1,0 +1,25 @@
+{
+    "train": {
+        "UDP-N-Acetylglucosamine": 1678,
+        "UDP-Glucuronic_Acid": 1042,
+        "UDP-Galactose": 587,
+        "UDP-Glucose": 449,
+        "UDP-Xylose": 383,
+        "UDP-N-Acetylgalactosamine": 303,
+        "GDP-Mannose": 274,
+        "UDP-Galacturonic_Acid": 27,
+        "UDP-Rhamnose": 6,
+        "dTDP-Rhamnose": 1
+    },
+    "test": {
+        "UDP-N-Acetylgalactosamine": 54,
+        "UDP-Galactose": 52,
+        "UDP-N-Acetylglucosamine": 49,
+        "UDP-Glucose": 37,
+        "GDP-Mannose": 21,
+        "UDP-Xylose": 17,
+        "UDP-Glucuronic_Acid": 15,
+        "dTDP-Rhamnose": 3,
+        "UDP-Galacturonic_Acid": 2
+    }
+}

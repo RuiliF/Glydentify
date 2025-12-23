@@ -1,0 +1,41 @@
+{
+    "donor_smiles": {
+        "UDP-Galacturonic_Acid": "C1=CN(C(=O)NC1=O)[C@H]2[C@@H]([C@@H]([C@H](O2)COP(=O)([O-])OP(=O)([O-])O[C@@H]3[C@@H]([C@H]([C@H]([C@H](O3)C(=O)[O-])O)O)O)O)O",
+        "UDP-Glucuronic_Acid": "C1=CN(C(=O)NC1=O)[C@H]2[C@@H]([C@@H]([C@H](O2)COP(=O)([O-])OP(=O)([O-])O[C@@H]3[C@@H]([C@H]([C@@H]([C@H](O3)C(=O)[O-])O)O)O)O)O",
+        "GDP-Mannose": "C1=NC2=C(N1[C@H]3[C@@H]([C@@H]([C@H](O3)COP(=O)([O-])OP(=O)([O-])O[C@@H]4[C@H]([C@H]([C@@H]([C@H](O4)CO)O)O)O)O)O)N=C(NC2=O)N",
+        "UDP-Mannose": "C1=CN(C(=O)NC1=O)[C@H]2[C@@H]([C@@H]([C@H](O2)COP(=O)(O)OP(=O)(O)OC3[C@H]([C@H]([C@@H]([C@H](O3)CO)O)O)O)O)O",
+        "UDP-Xylose": "C1[C@H]([C@@H]([C@H]([C@H](O1)OP(=O)([O-])OP(=O)([O-])OC[C@@H]2[C@H]([C@H]([C@@H](O2)N3C=CC(=O)NC3=O)O)O)O)O)O",
+        "UDP-Galactose": "C1=CN(C(=O)NC1=O)[C@H]2[C@@H]([C@@H]([C@H](O2)COP(=O)([O-])OP(=O)([O-])O[C@@H]3[C@@H]([C@H]([C@H]([C@H](O3)CO)O)O)O)O)O",
+        "UDP-N-Acetylgalactosamine": "CC(=O)N[C@@H]1[C@H]([C@H]([C@H](O[C@@H]1OP(=O)([O-])OP(=O)([O-])OC[C@@H]2[C@H]([C@H]([C@@H](O2)N3C=CC(=O)NC3=O)O)O)CO)O)O",
+        "UDP-N-Acetylglucosamine": "CC(=O)N[C@@H]1[C@H]([C@@H]([C@H](O[C@@H]1OP(=O)([O-])OP(=O)([O-])OC[C@@H]2[C@H]([C@H]([C@@H](O2)N3C=CC(=O)NC3=O)O)O)CO)O)O",
+        "UDP-Glucose": "C1=CN(C(=O)NC1=O)[C@H]2[C@@H]([C@@H]([C@H](O2)COP(=O)([O-])OP(=O)([O-])O[C@@H]3[C@@H]([C@H]([C@@H]([C@H](O3)CO)O)O)O)O)O",
+        "ADP-Glucose": "Nc1ncnc2n(cnc12)[C@@H]1O[C@H](COP([O-])(=O)OP([O-])(=O)O[C@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2O)[C@@H](O)[C@H]1O",
+        "dTDP-Rhamnose": "C[C@H]1[C@@H]([C@H]([C@H]([C@H](O1)OP(=O)([O-])OP(=O)([O-])OC[C@@H]2[C@H](C[C@@H](O2)N3C=C(C(=O)NC3=O)C)O)O)O)O",
+        "UDP-Rhamnose": "C[C@@H]1O[C@H](OP([O-])(=O)OP([O-])(=O)OC[C@H]2O[C@H]([C@H](O)[C@@H]2O)n2ccc(=O)[nH]c2=O)[C@H](O)[C@H](O)[C@H]1O",
+        "GDP-Rhamnose": "C[C@H]1O[C@H](OP([O-])(=O)OP([O-])(=O)OC[C@H]2O[C@H]([C@H](O)[C@@H]2O)n2cnc3c2nc(N)[nH]c3=O)[C@@H](O)[C@@H](O)[C@@H]1O",
+        "GDP-Fucose": "C[C@H]1[C@H]([C@H]([C@@H]([C@H](O1)OP(=O)(O)OP(=O)(O)OC[C@@H]2[C@H]([C@H]([C@@H](O2)N3C=NC4=C3N=C(NC4=O)N)O)O)O)O)O",
+        "dTDP-2-deoxy-L-fucose": "C[C@H]1[C@H]([C@H](C[C@H](O1)OP(=O)(O)OP(=O)(O)OC[C@@H]2[C@H](C[C@@H](O2)N3C=C(C(=O)NC3=O)C)O)O)O"
+    },
+    "label2id": {
+        "GDP-Mannose": 0,
+        "UDP-Galactose": 1,
+        "UDP-Galacturonic_Acid": 2,
+        "UDP-Glucose": 3,
+        "UDP-Glucuronic_Acid": 4,
+        "UDP-N-Acetylgalactosamine": 5,
+        "UDP-N-Acetylglucosamine": 6,
+        "UDP-Xylose": 7,
+        "dTDP-Rhamnose": 8
+    },
+    "saprot_name": "westlake-repl/SaProt_650M_AF2",
+    "unimol_size": "570m",
+    "lr": 5e-05,
+    "batch_size": 16,
+    "epochs": 50,
+    "max_seq_len": 2048,
+    "device": "cuda:0",
+    "train_unimol": false,
+    "train_saprot": false,
+    "checkpoint_dir": "checkpoints/add_and_norm_freeze_both/af2_mask70/gta/20250925_171307",
+    "patience": null
+}
