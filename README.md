@@ -31,15 +31,23 @@ glydentify_public/
     cd Glydentify
     ```
 2.  **Environment Setup:**
-    It is recommended to use the provided `glydentify` Conda environment.
     ```bash
     conda create -n glydentify python=3.10
     conda activate glydentify
+    ```
+    It is recommended to install PyTorch manually first to ensure the correct CUDA version for your hardware. Run the command below (or check the [official PyTorch website](https://pytorch.org/get-started/locally/) for your system):
+
+    ```bash
+    # Example for Linux with CUDA 12.9
+    pip install torch==2.8.0+cu129 torchvision==0.23.0+cu129 torchaudio==2.8.0+cu129 --index-url https://download.pytorch.org/whl/cu129
+    ```
+    Install rest of the dependencies:
+    ```bash
     pip install -r requirements.txt
     ```
 
 3.  **Install Foldseek:**
-    Please download the `foldseek` binary and place it in the `bin/` directory.
+    To use SaProt-UniMol version, please download the `foldseek` binary and place it in the `bin/` directory.
     You can download it from this [Google Drive Link](https://drive.google.com/file/d/1B_9t3n_nlj8Y3Kpc_mMjtMdY0OPYa7Re/view?usp=sharing).
     *Note: This structural encoding approach is based on [SaProt](https://github.com/westlake-repl/SaProt).*
 
