@@ -2,7 +2,7 @@
 
 **Glydentify** is a deep learning framework for predicting glycosyltransferase donor substrates using structure-aware protein language models and molecular representations. This repository contains the code and resources for the paper submitted to *Nature Communications*.
 
-## 📂 Repository Structure
+## Repository Structure
 
 ```
 glydentify_public/
