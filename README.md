@@ -27,8 +27,8 @@ glydentify_public/
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/yourusername/glydentify_public.git
-    cd glydentify_public
+    git clone https://github.com/RuiliF/Glydentify.git
+    cd Glydentify
     ```
 2.  **Environment Setup:**
     It is recommended to use the provided `glydentify` Conda environment.
