@@ -127,7 +127,7 @@ if __name__ == "__main__":
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     # Organize checkpoints by model type
-    checkpoint_dir = f"checkpoints/{args.model_type}_unimol/{args.fold}/" + timestamp
+    checkpoint_dir = f"checkpoints/{args.model_type}_unimol/{args.fold}" + timestamp
     os.makedirs(checkpoint_dir, exist_ok=True)
     with open(checkpoint_dir + "/label2id.json", "w") as f:
         json.dump(label2id, f)
@@ -165,7 +165,7 @@ if __name__ == "__main__":
     wandb.init(project=f"{args.model_type}_unimol", name=f"[domain] {prefix} add_and_norm_{mode_name}" + timestamp, config=config)
     config.pop("criterion")
     config.pop("use_alpha")
-    model = train_model(df_tr, df_te, df_exp=None, criterion=criterion,
+    model = train_model(df_tr, df_te, criterion=criterion,
                         **config, data_parallel=args.data_parallel)
 
     eval_model(model, df_te, batch_size=args.batch_size, output_name=os.path.join(checkpoint_dir, "final_results.json"))

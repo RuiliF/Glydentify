@@ -56,13 +56,13 @@ glydentify_public/
 ### Training
 To train the model (supports SaProt, ESM2, ESM-C):
 ```bash
-python scripts/train.py --fold <dataset_fold_name> --model_type <saprot|esm2|esmc> --train_unimol --train_seq_encoder --batch_size 16
+python scripts/train.py --fold <gta|gtb> --model_type <saprot|esm2|esmc> --batch_size 16
 ```
 Arguments:
 - `--fold`: Name of the dataset fold (expected in `data/<fold>/` or `../data/<fold>`).
 - `--model_type`: Model architecture (`saprot`, `esm2`, `esmc`). Default: `saprot`.
-- `--train_unimol`: Fine-tune the UniMol encoder.
-- `--train_seq_encoder`: Fine-tune the sequence encoder (SaProt/ESM).
+- `--train_unimol` (optional): Fine-tune the UniMol encoder.
+- `--train_seq_encoder` (optional): Fine-tune the sequence encoder (SaProt/ESM).
 
 ### Inference
 To run inference on a folder of protein structures (`.pdb` or `.cif`) using a trained checkpoint:

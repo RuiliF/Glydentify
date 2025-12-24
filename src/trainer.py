@@ -49,7 +49,6 @@ def check_optimizer_coverage(model, optimizer):
 def train_model(df_train, df_val,
                 donor_smiles, label2id,
                 criterion,
-                df_exp=None,
                 model_type="saprot",
                 checkpoint_name="westlake-repl/SaProt_650M_AF2",
                 unimol_size="84m",
@@ -95,12 +94,12 @@ def train_model(df_train, df_val,
     ds_train = GTDonorDataset(df_train, seq_column,
                               tokenizer, max_seq_len,
                               label2id, label_column="Donor",
-                              is_esmc=is_esmc
+                              is_esmc=(model_type == "esmc")
                               )
     ds_val   = GTDonorDataset(df_val,   seq_column,
                               tokenizer, max_seq_len,
                               label2id, label_column="Donor",
-                              is_esmc=is_esmc
+                              is_esmc=(model_type == "esmc")
                               )
 
     generator = torch.Generator()
@@ -109,14 +108,6 @@ def train_model(df_train, df_val,
     
     dl_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, generator=generator, collate_fn=collate_fn)
     dl_val   = DataLoader(ds_val,   batch_size=12, collate_fn=collate_fn)
-
-    if df_exp is not None:
-        ds_exp = GTDonorDataset(df_exp, seq_column,
-                                tokenizer, max_seq_len,
-                                label2id, label_column="Donor",
-                                is_esmc=is_esmc
-                                )
-        dl_exp = DataLoader(ds_exp, batch_size=12, collate_fn=collate_fn)
 
     if data_parallel:
         model = nn.DataParallel(model)
