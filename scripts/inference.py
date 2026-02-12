@@ -175,7 +175,8 @@ if __name__ == "__main__":
 
     df = pd.read_csv(saprot_csv)
     df = df.sort_values(by="Uniprot")
-    df['Nucleotide_Sugars'] = df['Nucleotide_Sugars'].apply(ast.literal_eval)
+    if 'Nucleotide_Sugars' in df.columns:
+        df['Nucleotide_Sugars'] = df['Nucleotide_Sugars'].apply(ast.literal_eval)
 
     # Inference
     all_probs, labels, model = inference(args.checkpoint, df, model_type=args.model_type, batch_size=args.batch_size, device=args.device, save_dir=save_dir)
