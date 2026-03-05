@@ -1,6 +1,6 @@
 # Glydentify
 
-**Glydentify** is a deep learning framework for predicting glycosyltransferase donor substrates using structure-aware protein language models and molecular representations. This repository contains the code and resources for the paper submitted to *Nature Communications*.
+**Glydentify** is a deep learning framework for predicting glycosyltransferase donor substrates using structure-aware protein language models and molecular representations. This repository contains the code and resources for the paper submitted to _Nature Communications_.
 
 ## Repository Structure
 
@@ -31,17 +31,21 @@ glydentify_public/
     cd Glydentify
     ```
 2.  **Environment Setup:**
+
     ```bash
     conda create -n glydentify python=3.10
     conda activate glydentify
     ```
+
     It is recommended to install PyTorch manually first to ensure the correct CUDA version for your hardware. Run the command below (or check the [official PyTorch website](https://pytorch.org/get-started/locally/) for your system):
 
     ```bash
     # Example for Linux with CUDA 12.9
     pip install torch==2.8.0+cu129 torchvision==0.23.0+cu129 torchaudio==2.8.0+cu129 --index-url https://download.pytorch.org/whl/cu129
     ```
+
     Install rest of the dependencies:
+
     ```bash
     pip install -r requirements.txt
     ```
@@ -49,35 +53,87 @@ glydentify_public/
 3.  **Install Foldseek:**
     To use SaProt-UniMol version, please download the `foldseek` binary and place it in the `bin/` directory.
     You can download it from this [Google Drive Link](https://drive.google.com/file/d/1B_9t3n_nlj8Y3Kpc_mMjtMdY0OPYa7Re/view?usp=sharing).
-    *Note: This structural encoding approach is based on [SaProt](https://github.com/westlake-repl/SaProt).*
+    _Note: This structural encoding approach is based on [SaProt](https://github.com/westlake-repl/SaProt)._
 
-## Usage
+## Docker Setup (Optional but Recommended)
+
+You can run Glydentify inside a Docker container for reproducibility and to easily manage dependencies. Before building the Docker image, **ensure you have downloaded the `foldseek` binary and placed it in the `bin/` directory as described above.**
+
+### 1. Prerequisites (Host Machine)
+
+To utilize GPUs inside Docker, your host machine must have:
+
+- **Docker** installed.
+- **NVIDIA GPU Drivers** installed and running.
+- **NVIDIA Container Toolkit** installed to bridge your host GPU to Docker.
+  - _Ubuntu/Debian installation:_ `sudo apt install nvidia-container-toolkit` followed by `sudo systemctl restart docker`.
+  - _See the [official guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) for more OS options._
+
+### 2. Building the Image
+
+From the root of the repository, build the Docker image (this will bake the `checkpoints/` directly into the image):
+
+```bash
+docker build -t glydentify .
+```
+
+### 3. Running with Docker
+
+When running the container, use the `--gpus all` flag to allow the container to access your host GPUs. Also, mount your local `data/` folder so the dataloader can read your datasets.
+
+**Example for Training:**
+
+```bash
+docker run --rm --gpus all \
+  -v "$(pwd)/data:/app/data" \
+  glydentify python scripts/train.py --fold <gta|gtb> --model_type <saprot|esm2|esmc> --batch_size 16
+```
+
+**Example for Inference:**
+
+```bash
+docker run --rm --gpus all \
+  -v "$(pwd)/data:/app/data" \
+  glydentify python scripts/inference.py data/gta/test.csv --checkpoint checkpoints/saprot_unimol/gta/
+```
+
+## Local Usage
 
 ### Training
+
 To train the model (supports SaProt, ESM2, ESM-C):
+
 ```bash
 python scripts/train.py --fold <gta|gtb> --model_type <saprot|esm2|esmc> --batch_size 16
 ```
+
 Arguments:
+
 - `--fold`: Name of the dataset fold (expected in `data/<fold>/` or `../data/<fold>`).
 - `--model_type`: Model architecture (`saprot`, `esm2`, `esmc`). Default: `saprot`.
 - `--train_unimol` (optional): Fine-tune the UniMol encoder.
 - `--train_seq_encoder` (optional): Fine-tune the sequence encoder (SaProt/ESM).
 
 ### Inference
+
 To run inference on a folder of protein structures (`.pdb` or `.cif`) using a trained checkpoint:
+
 ```bash
 python scripts/inference.py <input_folder> --checkpoint <path_to_checkpoint> --model_type <saprot|esm2|esmc>
 ```
+
 or evaluate on the test set:
+
 ```bash
 python scripts/inference.py --checkpoint checkpoints/saprot_unimol/gta/ data/gta/test.csv
 ```
 
 ### Structure Annotation
+
 To visualize attention weights on the protein structure:
+
 ```bash
-python scripts/annotate.py <input_folder> --checkpoint_path <path_to_checkpoint> --target_donor <donor_name>
+python scripts/annotate.py <input_folder> --checkpoint <path_to_checkpoint> --target_donor <donor_name>
 ```
 
 ## License
@@ -87,4 +143,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Citation
 
 If you use this code or data, please cite our paper:
+
 > [Citation Placeholder]

@@ -1,0 +1,23 @@
+# Ignore git files
+.git/
+.gitignore
+
+# Ignore data folders as they should be mounted as volumes
+data/
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Ignore virtual environments
+venv/
+env/
+.env
+.venv/
+glydentify/
+
+# Ignore IDE files
+.vscode/
+.idea/
