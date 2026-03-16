@@ -289,10 +289,3 @@ def transform_pdb_dir(foldseek: str, pdb_dir: str, seq_type: str, save_path: str
     os.remove(tmp_save_path + ".dbtype")
     
 
-if __name__ == '__main__':
-    foldseek = "/sujin/bin/foldseek"
-    # test_path = "/sujin/Datasets/PDB/all/6xtd.cif"
-    test_path = "/sujin/Datasets/FLIP/meltome/af2_structures/A0A061ACX4.pdb"
-    plddt_path = "/sujin/Datasets/FLIP/meltome/af2_plddts/A0A061ACX4.json"
-    res = get_struc_seq(foldseek, test_path, plddt_path=plddt_path, plddt_threshold=70.)
-    print(res["A"][1].lower())
