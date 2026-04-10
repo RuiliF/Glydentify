@@ -43,14 +43,14 @@ glydentify_public/
     # Example for Linux with CUDA 12.9
     pip install torch==2.8.0+cu129 torchvision==0.23.0+cu129 torchaudio==2.8.0+cu129 --index-url https://download.pytorch.org/whl/cu129
     ```
-
+    > ⚠️ **Note on reproducibility** : Prediction scores are sensitive to **PyTorch versions**. Running inference with a different PyTorch version than specified may produce ***substantially different absolute probability scores***, even on identical input files. Note that not all CUDA versions are compatible with the PyTorch version required — if you encounter installation errors, we recommend using our [Docker deployment instructions](https://github.com/RuiliF/Glydentify/edit/main/README.md#docker-setup-optional-but-recommended) below.
+    
     Install rest of the dependencies:
-
     ```bash
     pip install -r requirements.txt
     ```
 
-3.  **Install Foldseek:**
+4.  **Install Foldseek:**
     To use SaProt-UniMol version, please download the `foldseek` binary and place it in the `bin/` directory.
     You can download it from this [Google Drive Link](https://drive.google.com/file/d/1B_9t3n_nlj8Y3Kpc_mMjtMdY0OPYa7Re/view?usp=sharing).
     _Note: This structural encoding approach is based on [SaProt](https://github.com/westlake-repl/SaProt)._
