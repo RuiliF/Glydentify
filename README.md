@@ -1,6 +1,6 @@
 # Glydentify
 
-**Glydentify** is a deep learning framework for predicting glycosyltransferase donor substrates using structure-aware protein language models and molecular representations. This repository contains the code and resources for the paper submitted to _Nature Communications_.
+**Glydentify** is a deep learning framework for predicting glycosyltransferase donor substrates using structure-aware protein language models and molecular representations. This repository contains the code and resources for the paper submitted to _Communications Biology_.
 
 ## Repository Structure
 
@@ -144,4 +144,18 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 If you use this code or data, please cite our paper:
 
-> [Citation Placeholder]
+```bibtex
+@article {Fang2026.03.13.711695,
+	author = {Fang, Ruili and Na, Lan and Corulli, Charles J. and Prabhakar, Pradeep K. and Berardinelli, Steven J and Venkat, Aarya and Prasad, Anup and Mahmud, Rezwan and Moremen, Kelley W. and Urbanowicz, Breeanna R. and Dou, Fei and Kannan, Natarajan},
+	title = {Glydentify: An explainable deep learning platform for glycosyltransferase donor substrate prediction},
+	elocation-id = {2026.03.13.711695},
+	year = {2026},
+	doi = {10.64898/2026.03.13.711695},
+	publisher = {Cold Spring Harbor Laboratory},
+	URL = {https://www.biorxiv.org/content/early/2026/03/17/2026.03.13.711695},
+	eprint = {https://www.biorxiv.org/content/early/2026/03/17/2026.03.13.711695.full.pdf},
+	journal = {bioRxiv}
+}
+```
+> This citation reflects the current bioRxiv preprint. A peer-reviewed version is under consideration; citation will be updated upon acceptance.
+
