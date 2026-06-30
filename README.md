@@ -5,7 +5,7 @@
 ## Repository Structure
 
 ```
-glydentify_public/
+Glydentify/
 ├── src/                  # Core package source code
 │   ├── model.py          # GTDonorPredictor model definition
 │   ├── dataset.py        # Dataset loading and processing
@@ -17,8 +17,8 @@ glydentify_public/
 │   ├── inference.py      # Inference on a folder of PDB/CIF files
 │   └── annotate.py       # Annotate structures with attention weights
 ├── data/                 # Datasets (e.g., gta/train.csv, gtb/test.csv)
-├── checkpoints/          # Model checkpoints (e.g., saprot_unimol/gta/)
-├── bin/                  # Directory for external binaries (Focus is on Foldseek)
+├── checkpoints/          # Model checkpoints (e.g., saprot_unimol/gta/, saprot_mlp/gta/)
+├── bin/                  # Directory for external binaries (Foldseek)
 ├── requirements.txt      # Python dependencies
 └── README.md             # This file
 ```
@@ -43,15 +43,15 @@ glydentify_public/
     # Example for Linux with CUDA 12.9
     pip install torch==2.8.0+cu129 torchvision==0.23.0+cu129 torchaudio==2.8.0+cu129 --index-url https://download.pytorch.org/whl/cu129
     ```
-    > ⚠️ **Note on reproducibility** : Prediction scores are sensitive to **PyTorch versions**. Running inference with a different PyTorch version than specified may produce ***substantially different absolute probability scores***, even on identical input files. Note that not all CUDA versions are compatible with the PyTorch version required — if you encounter installation errors, we recommend using our [Docker deployment instructions](https://github.com/RuiliF/Glydentify/edit/main/README.md#docker-setup-optional-but-recommended) below.
+    > ⚠️ **Note on reproducibility** : Prediction scores are sensitive to **PyTorch versions**. Running inference with a different PyTorch version than specified may produce ***substantially different absolute probability scores***, even on identical input files. Note that not all CUDA versions are compatible with the PyTorch version required — if you encounter installation errors, we recommend using our [Docker deployment instructions](#docker-setup-optional-but-recommended) below.
     
     Install rest of the dependencies:
     ```bash
     pip install -r requirements.txt
     ```
 
-4.  **Install Foldseek:**
-    To use SaProt-UniMol version, please download the `foldseek` binary and place it in the `bin/` directory.
+3.  **Install Foldseek:**
+    To use SaProt-based models or parse structure folders, download the `foldseek` binary and place it in the `bin/` directory.
     You can download it from this [Google Drive Link](https://drive.google.com/file/d/1B_9t3n_nlj8Y3Kpc_mMjtMdY0OPYa7Re/view?usp=sharing).
     _Note: This structural encoding approach is based on [SaProt](https://github.com/westlake-repl/SaProt)._
 
@@ -79,14 +79,15 @@ docker build -t glydentify .
 
 ### 3. Running with Docker
 
-When running the container, use the `--gpus all` flag to allow the container to access your host GPUs. Also, mount your local `data/` folder so the dataloader can read your datasets.
+When running the container, use the `--gpus all` flag to allow the container to access your host GPUs. Also, mount your local `data/` folder so the dataloader can read your datasets. For training, mount `checkpoints/` as well so newly written checkpoints persist after the container exits.
 
 **Example for Training:**
 
 ```bash
 docker run --rm --gpus all \
   -v "$(pwd)/data:/app/data" \
-  glydentify python scripts/train.py --fold <gta|gtb> --model_type <saprot|esm2|esmc> --batch_size 16
+  -v "$(pwd)/checkpoints:/app/checkpoints" \
+  glydentify python scripts/train.py --fold <gta|gtb> --model_type <saprot|esm2|esmc> --batch_size 16 --ckpt_base_dir checkpoints/training_runs
 ```
 
 **Example for Inference:**
@@ -94,23 +95,34 @@ docker run --rm --gpus all \
 ```bash
 docker run --rm --gpus all \
   -v "$(pwd)/data:/app/data" \
-  glydentify python scripts/inference.py data/gta/test.csv --checkpoint checkpoints/saprot_unimol/gta/
+  glydentify python scripts/inference.py data/gta/test.csv --checkpoint checkpoints/saprot_unimol/gta/ --model_type saprot
 ```
 
 ## Local Usage
+
+### Available Checkpoints
+
+The primary model checkpoints are the UniMol-fusion models used for the main Glydentify workflow:
+
+- `checkpoints/saprot_unimol/<gta|gtb>/`
+- `checkpoints/esm2_unimol/<gta|gtb>/`
+- `checkpoints/esmc_unimol/<gta|gtb>/`
+
+The repository also includes MLP-head checkpoints for reviewer/reproducibility checks: `checkpoints/saprot_mlp/<gta|gtb>/`, `checkpoints/esm2_mlp/<gta|gtb>/`, and `checkpoints/esmc_mlp/<gta|gtb>/`. Use the matching `--model_type` value for the checkpoint directory: `saprot`, `esm2`, `esmc`, `saprot_mlp`, `esm2_mlp`, or `esmc_mlp`.
 
 ### Training
 
 To train the model (supports SaProt, ESM2, ESM-C):
 
 ```bash
-python scripts/train.py --fold <gta|gtb> --model_type <saprot|esm2|esmc> --batch_size 16
+python scripts/train.py --fold <gta|gtb> --model_type <saprot|esm2|esmc> --batch_size 16 --ckpt_base_dir checkpoints/training_runs
 ```
 
 Arguments:
 
 - `--fold`: Name of the dataset fold (expected in `data/<fold>/` or `../data/<fold>`).
-- `--model_type`: Model architecture (`saprot`, `esm2`, `esmc`). Default: `saprot`.
+- `--model_type`: Model architecture (`saprot`, `esm2`, `esmc`). Default: `saprot`. MLP-head model types are available for reviewer/reproducibility checks but are not the primary recommended workflow.
+- `--ckpt_base_dir`: Directory for new training outputs. Set this explicitly; the script default is a lab-specific absolute path.
 - `--train_unimol` (optional): Fine-tune the UniMol encoder.
 - `--train_seq_encoder` (optional): Fine-tune the sequence encoder (SaProt/ESM).
 
@@ -119,21 +131,31 @@ Arguments:
 To run inference on a folder of protein structures (`.pdb` or `.cif`) using a trained checkpoint:
 
 ```bash
-python scripts/inference.py <input_folder> --checkpoint <path_to_checkpoint> --model_type <saprot|esm2|esmc>
+python scripts/inference.py <input_folder> --parse --checkpoint <path_to_checkpoint> --model_type <saprot|esm2|esmc|saprot_mlp|esm2_mlp|esmc_mlp>
 ```
 
-or evaluate on the test set:
+The `--parse` flag creates `<input_folder>/saprot_sequences_<plddt_threshold>.csv` from the structures. If that CSV already exists, `--parse` can be omitted.
+
+To evaluate on a CSV/test set:
 
 ```bash
-python scripts/inference.py --checkpoint checkpoints/saprot_unimol/gta/ data/gta/test.csv
+python scripts/inference.py data/gta/test.csv --checkpoint checkpoints/saprot_unimol/gta/ --model_type saprot
 ```
+
+For a reviewer/reproducibility check with an MLP-head checkpoint:
+
+```bash
+python scripts/inference.py data/gta/test.csv --checkpoint checkpoints/saprot_mlp/gta/ --model_type saprot_mlp
+```
+
+When the input CSV includes `Nucleotide_Sugars`, `max_identity`, and `Organism(Kingdom)`, inference also writes evaluation metrics through `src.trainer.eval_model`: per-donor metrics, similarity-bin metrics, kingdom-bin metrics, `major_classes`, and `all_classes`. The metric helper is `src.utils.compute_metrics`, which uses a 0.5 threshold for precision/recall/F1/MCC/confusion counts and probability scores for ROC-AUC/PR-AUC.
 
 ### Structure Annotation
 
 To visualize attention weights on the protein structure:
 
 ```bash
-python scripts/annotate.py <input_folder> --checkpoint <path_to_checkpoint> --target_donor <donor_name>
+python scripts/annotate.py <input_folder> --checkpoint <path_to_checkpoint> --model_type <saprot|esm2|esmc> --target_donor <donor_name>
 ```
 
 ## License
