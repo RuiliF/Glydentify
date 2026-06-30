@@ -20,7 +20,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--fold", type=str, required=True, help="Path to the dataset (folder name in data/ or 'gta'/'gtb').")
-    parser.add_argument("--model_type", type=str, default="saprot", choices=["saprot", "esm2", "esmc"], help="Model architecture.")
+    parser.add_argument("--model_type", type=str, default="saprot", choices=["saprot", "esm2", "esmc", "esm2_mlp", "saprot_mlp", "esmc_mlp"], help="Model architecture.")
     parser.add_argument("--checkpoint_name", type=str, default=None, help="HF checkpoint or path to model weights.")
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--max_seq_len", type=int, default=1024)
@@ -37,9 +37,12 @@ if __name__ == "__main__":
     parser.add_argument("--train_seq_encoder", action="store_true", default=False)
     parser.add_argument("--weight_decay", type=float, default=1e-4)
     parser.add_argument("--data_parallel", action="store_true", default=False)
+    parser.add_argument("--train_csv", type=str, default=None, help="Override path to training CSV.")
+    parser.add_argument("--test_csv", type=str, default=None, help="Override path to test CSV.")
+    parser.add_argument("--ckpt_base_dir", type=str, default="/mnt/storage1/ruili/Glydentify/ckpts", help="Base directory for saving checkpoints.")
 
     args = parser.parse_args()
-    
+
     if args.seed is not None:
         set_seed(args.seed)
         torch.use_deterministic_algorithms(True)
@@ -47,21 +50,33 @@ if __name__ == "__main__":
 
     # Set default checkpoint names if not provided
     if args.checkpoint_name is None:
-        if args.model_type == "saprot":
+        if args.model_type in ("saprot", "saprot_mlp"):
             args.checkpoint_name = "westlake-repl/SaProt_650M_AF2"
-        elif args.model_type == "esm2":
+        elif args.model_type in ("esm2", "esm2_mlp"):
             args.checkpoint_name = "facebook/esm2_t33_650M_UR50D"
-        elif args.model_type == "esmc":
+        elif args.model_type in ("esmc", "esmc_mlp"):
             args.checkpoint_name = "esmc_600m"
 
-    # Load data
-    try:
-        df_tr = pd.read_csv(f"../data/{args.fold}/train.csv")
-        df_te = pd.read_csv(f"../data/{args.fold}/test.csv")
-    except FileNotFoundError:
-         # Try loading relative to script if run differently
-        df_tr = pd.read_csv(f"data/{args.fold}/train.csv")
-        df_te = pd.read_csv(f"data/{args.fold}/test.csv")
+    # Load data — custom paths take priority over fold-derived defaults
+    def _load_csv(custom_path, fold_path):
+        if custom_path:
+            return pd.read_csv(custom_path)
+        try:
+            return pd.read_csv(f"../data/{fold_path}")
+        except FileNotFoundError:
+            return pd.read_csv(f"data/{fold_path}")
+
+    df_tr = _load_csv(args.train_csv, f"{args.fold}/train.csv")
+    df_te = _load_csv(args.test_csv, f"{args.fold}/test.csv")
+
+    # Drop rows missing the sequence column required by the chosen model
+    seq_col = "SaProt Sequence" if args.model_type == "saprot" else "Sequence"
+    if seq_col in df_tr.columns:
+        before = len(df_tr)
+        df_tr = df_tr.dropna(subset=[seq_col]).reset_index(drop=True)
+        dropped = before - len(df_tr)
+        if dropped:
+            print(f"Dropped {dropped} training rows missing '{seq_col}'")
 
     df_tr["Nucleotide_Sugars"] = df_tr["Nucleotide_Sugars"].apply(ast.literal_eval)
     df_te["Nucleotide_Sugars"] = df_te["Nucleotide_Sugars"].apply(ast.literal_eval)
@@ -126,8 +141,7 @@ if __name__ == "__main__":
         mode_name = "train_seq_encoder"
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # Organize checkpoints by model type
-    checkpoint_dir = f"checkpoints/{args.model_type}_unimol/{args.fold}" + timestamp
+    checkpoint_dir = os.path.join(args.ckpt_base_dir, f"{args.model_type}_unimol", f"{args.fold}_{timestamp}")
     os.makedirs(checkpoint_dir, exist_ok=True)
     with open(checkpoint_dir + "/label2id.json", "w") as f:
         json.dump(label2id, f)

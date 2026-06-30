@@ -16,7 +16,7 @@ from tqdm import tqdm
 import numpy as np
 from collections import defaultdict
 import ast
-from src.model import GTDonorPredictor
+from src.model import GTDonorPredictor, MLPPredictor
 from src.dataset import GTDonorDataset, get_collate_fn
 from src.utils import get_struc_seq, set_seed, report_metrics, compute_multilabel_metrics
 from src.trainer import eval_model
@@ -53,15 +53,19 @@ def inference(checkpoint_path, df, model_type="saprot", batch_size=6, device="cu
     else:
         raise ValueError("Config file not found at:", config_path)
 
+    mlp_types = {"esm2_mlp", "saprot_mlp", "esmc_mlp"}
     if os.path.isdir(checkpoint_path):
-        model = GTDonorPredictor.from_pretrained(model_type, checkpoint_path, device=device)
+        if model_type in mlp_types:
+            model = MLPPredictor.from_pretrained(checkpoint_path, device=device)
+        else:
+            model = GTDonorPredictor.from_pretrained(model_type, checkpoint_path, device=device)
     else:
         raise ValueError("Wrong checkpoint path:", checkpoint_path)
 
     model.to(device)
     model.eval()
 
-    if model_type in ["esm2", "esmc"]:
+    if model_type in ("esm2", "esmc", "esm2_mlp", "esmc_mlp"):
         seq_column = "Sequence"
         if "Sequence" not in df.columns and "SaProt Sequence" in df.columns:
             df["Sequence"] = df["SaProt Sequence"].apply(lambda x: x[::2])
@@ -85,22 +89,23 @@ def inference(checkpoint_path, df, model_type="saprot", batch_size=6, device="cu
         return all_probs, all_labels, model
     
     # Otherwise, do inference
-    if model_type == "esmc":
+    is_esmc = model_type in ("esmc", "esmc_mlp")
+    if is_esmc:
         tokenizer = model.seq_encoder.tokenizer
         collate_fn = get_collate_fn(tokenizer, is_esmc=True)
     else:
         tokenizer = AutoTokenizer.from_pretrained(model.checkpoint_name)
-        collate_fn = None
+        collate_fn = get_collate_fn(tokenizer, is_esmc=False)
 
     max_seq_len = df[seq_column].str.len().max()
-    if model_type == "saprot":
+    if model_type in ("saprot", "saprot_mlp"):
         max_seq_len //= 2
 
     if label_column in df.columns:
         df[label_column] = df[label_column].apply(ast.literal_eval)
-        ds = GTDonorDataset(df, seq_column, tokenizer, max_seq_len, label2id=model.label2id, label_column=label_column, is_esmc=(model_type == "esmc"))
+        ds = GTDonorDataset(df, seq_column, tokenizer, max_seq_len, label2id=model.label2id, label_column=label_column, is_esmc=is_esmc)
     else:
-        ds = GTDonorDataset(df, seq_column, tokenizer, max_seq_len, label2id=None, label_column=None, is_esmc=(model_type == "esmc"))
+        ds = GTDonorDataset(df, seq_column, tokenizer, max_seq_len, label2id=None, label_column=None, is_esmc=is_esmc)
     dl = DataLoader(ds, batch_size=batch_size, collate_fn=collate_fn)
 
     all_probs, aw_seqs, aw_mols = [], [], []
@@ -132,7 +137,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=6)
     parser.add_argument("--plddt_threshold", type=float, default=70.)
     parser.add_argument("--parse", action="store_true", default=False)
-    parser.add_argument("--model_type", type=str, default=None, choices=["saprot", "esm2", "esmc"])
+    parser.add_argument("--model_type", type=str, default=None, choices=["saprot", "esm2", "esmc", "esm2_mlp", "saprot_mlp", "esmc_mlp"])
     parser.add_argument("--device", type=str, default="cuda:0")
     args = parser.parse_args()
     
@@ -156,11 +161,13 @@ if __name__ == "__main__":
     if os.path.splitext(args.input)[1] == ".csv":
         saprot_csv = args.input
         save_dir = os.path.dirname(args.input)
+        input_stem = os.path.splitext(os.path.basename(args.input))[0]
         if args.parse:
             print(f"[WARNING] Cannot parse CSV file: {args.input}")
     elif os.path.isdir(args.input):
         saprot_csv = os.path.join(args.input, f"saprot_sequences_{args.plddt_threshold}.csv")
         save_dir = args.input
+        input_stem = os.path.splitext(os.path.basename(saprot_csv))[0]
         if args.parse:
             print(f"Parsing folder {args.input}")
             df = parse_folder(args.input, args.plddt_threshold)
@@ -196,15 +203,37 @@ if __name__ == "__main__":
         label2id = {} # Need to handle this
     
     if label2id:
-        df_results = df[["Uniprot"]].copy()
         id2label = {v:k for k,v in label2id.items()}
-        for idx in range(all_probs.shape[1]):
-            label = id2label.get(idx, f"Label_{idx}")
-            df_results[label] = all_probs[:, idx]
-        df_results.to_csv(os.path.join(save_dir, f"{args.model_type}_predictions_{args.plddt_threshold}.csv"), index=False)
-        print("Saved predictions to", os.path.join(save_dir, f"{args.model_type}_predictions_{args.plddt_threshold}.csv"))
+        donor_cols = [id2label[i] for i in range(all_probs.shape[1])]
+
+        score_df = df[["Uniprot"]].copy().reset_index(drop=True)
+        for idx, label in enumerate(donor_cols):
+            score_df[label] = all_probs[:, idx]
+        score_df["Predicted_Nucleotide_Sugars"] = [
+            str([donor_cols[i] for i in range(all_probs.shape[1]) if row[i] >= 0.5])
+            for row in all_probs
+        ]
+
+        # carry over all non-sequence metadata columns from the input df
+        skip_cols = {"SaProt Sequence", "Sequence"}
+        meta_cols = [c for c in df.columns if c not in skip_cols and c not in score_df.columns]
+        df_results = score_df.merge(df[["Uniprot"] + meta_cols].reset_index(drop=True), on="Uniprot", how="left")
+
+        # reorder: Uniprot, meta, Nucleotide_Sugars (if present), Predicted_Nucleotide_Sugars, scores
+        front = ["Uniprot"] + meta_cols
+        if "Nucleotide_Sugars" in front:
+            ns_idx = front.index("Nucleotide_Sugars")
+            front.insert(ns_idx + 1, "Predicted_Nucleotide_Sugars")
+        else:
+            front.append("Predicted_Nucleotide_Sugars")
+        df_results = df_results[front + donor_cols]
+
+        out_path = os.path.join(save_dir, f"{args.model_type}_predictions_{args.plddt_threshold}_{input_stem}.csv")
+        df_results.to_csv(out_path, index=False)
+        print("Saved predictions to", out_path)
 
     else:
-        np.save(os.path.join(save_dir, f"{args.model_type}_probs.npy"), all_probs)
-        print("Saved raw probs to", os.path.join(save_dir, f"{args.model_type}_probs.npy"))
+        out_path = os.path.join(save_dir, f"{args.model_type}_probs_{input_stem}.npy")
+        np.save(out_path, all_probs)
+        print("Saved raw probs to", out_path)
 

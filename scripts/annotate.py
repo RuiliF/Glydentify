@@ -15,8 +15,9 @@ from tqdm import tqdm
 from glob import glob
 import pickle
 import argparse
-from Bio.PDB import MMCIFParser
+from Bio.PDB import MMCIFParser, PDBParser
 from Bio.PDB.mmcifio import MMCIFIO
+from Bio.PDB import PDBIO
 # from Bio.PDB.Polypeptide import three_to_one
 from Bio.SeqUtils import seq1 as three_to_one
 from rdkit import Chem
@@ -67,9 +68,15 @@ donor_abbr = {
     "dTDP-2-deoxy-L-fuc": "dTDP-2-deoxy-L-fucose"
 }
 
-def annot_struct_and_save(struct_path, seq_attn, mol_attn, save_path, annot_donor=False, donor=None, plddt_threshold=70.0):
-    name = os.path.basename(struct_path).replace(".cif", "") # Assuming CIF
-    parser = MMCIFParser()
+def annot_struct_and_save(struct_path, seq_attn, mol_attn, annot_donor=False, donor=None, plddt_threshold=70.0, out_dir=None):
+    ext = os.path.splitext(struct_path)[1].lower()
+    name = os.path.splitext(os.path.basename(struct_path))[0]
+
+    if ext == ".cif":
+        parser = MMCIFParser()
+    else:
+        parser = PDBParser(QUIET=True)
+
     try:
         structure = parser.get_structure(name, struct_path)
     except:
@@ -78,23 +85,29 @@ def annot_struct_and_save(struct_path, seq_attn, mol_attn, save_path, annot_dono
 
     model = structure[0]
     chain_A = model["A"]
-    
+
     # Normalize attention
     if len(seq_attn) > 0:
-         aw_seq_norm = (seq_attn - seq_attn.min()) / (seq_attn.max() - seq_attn.min() + 1e-8)
+        aw_seq_norm = (seq_attn - seq_attn.min()) / (seq_attn.max() - seq_attn.min() + 1e-8)
     else:
-         aw_seq_norm = np.zeros(len(chain_A))
-    
+        aw_seq_norm = np.zeros(len(chain_A))
+
     for i, residue in enumerate(chain_A):
-        score = aw_seq_norm[i] if i < len(aw_seq_norm) else 0.0
+        score = float(aw_seq_norm[i]) if i < len(aw_seq_norm) else 0.0
         for atom in residue:
             atom.set_bfactor(score)
 
-    # Save
-    pdb_path = os.path.join(save_path, f"{name}.cif")
-    io = MMCIFIO()
+    # Save to out_dir if provided, otherwise overwrite in place
+    if out_dir is not None:
+        out_path = os.path.join(out_dir, os.path.basename(struct_path))
+    else:
+        out_path = struct_path
+    if ext == ".cif":
+        io = MMCIFIO()
+    else:
+        io = PDBIO()
     io.set_structure(structure)
-    io.save(pdb_path)
+    io.save(out_path)
 
 def parse_struct(struct_path, tokenizer, plddt_threshold=70., chain_id="A"):
     # This matches original logic but uses src.utils
@@ -154,6 +167,7 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to checkpoint")
     parser.add_argument("--plddt_threshold", type=float, default=70., help="pLDDT threshold")
     parser.add_argument("--target_donor", type=str, default=None, help="Target donor")
+    parser.add_argument("--scores_csv", type=str, default=None, help="CSV with pre-computed prediction scores (columns: Uniprot + donor names). If provided, scores from CSV are used in output instead of recomputed values.")
     parser.add_argument("--device", type=str, default="cuda:0")
     args = parser.parse_args()
 
@@ -166,7 +180,8 @@ if __name__ == "__main__":
             raise ValueError("Model type not specified and could not be inferred from checkpoint path.")
         print("Model type not specified, using", args.model_type) 
 
-    annot_struct_path = os.path.join(args.input, f"{args.model_type}_attn_struct{('_' + args.target_donor) if args.target_donor else ''}_{args.plddt_threshold}")
+    input_dir = args.input if os.path.isdir(args.input) else os.path.dirname(args.input)
+    annot_struct_path = os.path.join(input_dir, f"{args.model_type}_attn_struct_{args.plddt_threshold}")
     os.makedirs(annot_struct_path, exist_ok=True)
     
 
@@ -186,7 +201,12 @@ if __name__ == "__main__":
     label2id = {k.lower(): v for k, v in label2id.items()}
     donor_abbr = {k.lower(): v.lower() for k, v in donor_abbr.items()}
 
-    files = glob(os.path.join(args.input, "*.cif"))
+    if os.path.isfile(args.input):
+        files = [args.input]
+        input_dir = os.path.dirname(args.input)
+    else:
+        files = glob(os.path.join(args.input, "*.cif")) + glob(os.path.join(args.input, "*.pdb"))
+        input_dir = args.input
     prediction_results = {}
     
     for file in files:
@@ -195,6 +215,10 @@ if __name__ == "__main__":
         
         if args.target_donor:
             target_donor = args.target_donor.lower()
+        elif name.endswith("_model"):
+            # Extract donor: everything between first '_' and '_model' suffix
+            donor_part = name[name.index("_")+1:-len("_model")]
+            target_donor = donor_part.lower()
         elif len(parts) > 1:
             target_donor = parts[1].lower()
         else:
@@ -224,10 +248,16 @@ if __name__ == "__main__":
         seq_attn_raw = aw_seq[0][donor_idx]
         mol_attn_raw = aw_mol[0][donor_idx]
         
-        annot_struct_and_save(file, seq_attn_raw, mol_attn_raw, annot_struct_path, annot_donor=True, donor=target_donor)
+        annot_struct_and_save(file, seq_attn_raw, mol_attn_raw, annot_donor=True, donor=target_donor, out_dir=annot_struct_path)
         
         pred_prob = torch.sigmoid(logits).cpu().numpy()[0][donor_idx]
         prediction_results[name] = float(pred_prob)
 
-    with open(os.path.join(annot_struct_path, "prediction_results.json"), "w") as f:
+    results_path = os.path.join(annot_struct_path, "prediction_results.json")
+    if os.path.exists(results_path):
+        with open(results_path) as f:
+            existing = json.load(f)
+        existing.update(prediction_results)
+        prediction_results = existing
+    with open(results_path, "w") as f:
         json.dump(prediction_results, f, indent=4)
