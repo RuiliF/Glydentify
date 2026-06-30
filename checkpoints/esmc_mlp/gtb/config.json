@@ -1,0 +1,21 @@
+{
+    "label2id": {
+        "ADP-Glucose": 0,
+        "GDP-Fucose": 1,
+        "GDP-Mannose": 2,
+        "UDP-Galactose": 3,
+        "UDP-Glucose": 4,
+        "UDP-Glucuronic_Acid": 5,
+        "UDP-N-Acetylgalactosamine": 6,
+        "UDP-N-Acetylglucosamine": 7,
+        "UDP-Rhamnose": 8,
+        "UDP-Xylose": 9
+    },
+    "lr": 5e-05,
+    "batch_size": 16,
+    "epochs": 50,
+    "max_seq_len": 2034,
+    "checkpoint_dir": "checkpoints/mlp-freeze_encoder/af2_mask70/gtb/esmc_600m_20250923_034057",
+    "train_encoder": false,
+    "ckpt_name": "esmc_600m"
+}

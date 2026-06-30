@@ -35,10 +35,10 @@ def compute_metrics(targets, probs):
         "roc_auc": roc_auc_score(labels, probs, average="micro"),
         "pr_auc": pr_auc_score(labels, probs),
         "mcc": matthews_corrcoef(labels.flatten(), preds.flatten()),
-        "tn": tn.item(),
-        "fp": fp.item(),
-        "fn": fn.item(),
-        "tp": tp.item()
+        "tn": int(tn),
+        "fp": int(fp),
+        "fn": int(fn),
+        "tp": int(tp)
     }
 
 def compute_multilabel_metrics(probs, labels, label2id, threshold=0.5):
@@ -191,41 +191,45 @@ def get_struc_seq(foldseek,
     with open(tmp_save_path, "r") as r:
         for i, line in enumerate(r):
             desc, seq, struc_seq = line.split("\t")[:3]
-            
+
+            name_chain = desc.split(" ")[0]
+            chain = name_chain.replace(name, "").split("_")[-1]
+
+            # Skip chains we don't need before doing expensive plddt extraction
+            if chains is not None and chain not in chains:
+                continue
+
             # Mask low plddt
             if plddt_mask:
                 try:
-                    plddts = extract_plddt(path)
+                    plddts = extract_plddt(path, chain_id=chain)
                     assert len(plddts) == len(struc_seq), f"Length mismatch: {len(plddts)} != {len(struc_seq)}"
-                    
+
                     # Mask regions with plddt < threshold
                     indices = np.where(plddts < plddt_threshold)[0]
                     np_seq = np.array(list(struc_seq))
                     np_seq[indices] = "#"
                     struc_seq = "".join(np_seq)
-                
+
                 except Exception as e:
                     print(f"Error: {e}")
                     print(f"Failed to mask plddt for {name}")
-            
-            name_chain = desc.split(" ")[0]
-            chain = name_chain.replace(name, "").split("_")[-1]
-            
-            if chains is None or chain in chains:
-                if chain not in seq_dict:
-                    combined_seq = "".join([a + b.lower() for a, b in zip(seq, struc_seq)])
-                    seq_dict[chain] = (seq, struc_seq, combined_seq)
+
+            if chain not in seq_dict:
+                combined_seq = "".join([a + b.lower() for a, b in zip(seq, struc_seq)])
+                seq_dict[chain] = (seq, struc_seq, combined_seq)
     
     os.remove(tmp_save_path)
     os.remove(tmp_save_path + ".dbtype")
     return seq_dict
 
 
-def extract_plddt(pdb_path: str) -> np.ndarray:
+def extract_plddt(pdb_path: str, chain_id: str = "A") -> np.ndarray:
     """
     Extract plddt scores from pdb file.
     Args:
         pdb_path: Path to pdb file.
+        chain_id: Chain ID to extract plddt scores from.
 
     Returns:
         plddts: plddt scores.
@@ -238,19 +242,21 @@ def extract_plddt(pdb_path: str) -> np.ndarray:
         parser = PDBParser()
     else:
         raise ValueError("Invalid file format for plddt extraction. Must be '.cif' or '.pdb'.")
-    
+
     structure = parser.get_structure('protein', pdb_path)
     model = structure[0]
-    chain = model["A"]
+    chain = model[chain_id]
 
     # Extract plddt scores
     plddts = []
     for residue in chain:
+        if 'CA' not in residue:  # Skip non-amino-acid records (water, ligands); keep modified residues
+            continue
         residue_plddts = []
         for atom in residue:
             plddt = atom.get_bfactor()
             residue_plddts.append(plddt)
-        
+
         plddts.append(np.mean(residue_plddts))
 
     plddts = np.array(plddts)

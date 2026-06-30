@@ -1,6 +1,12 @@
 __pycache__/
+.venv
 logs/
 foldseek
 data/
 *.log
 
+wandb/
+
+web/frontend/node_modules/
+web/frontend/dist/
+web/backend/jobs/

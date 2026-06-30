@@ -17,7 +17,7 @@ import pickle
 import random
 
 from .dataset import GTDonorDataset, get_collate_fn
-from .model import GTDonorPredictor
+from .model import GTDonorPredictor, MLPPredictor
 from .losses import *
 from .utils import compute_multilabel_metrics, compute_metrics
 
@@ -64,50 +64,60 @@ def train_model(df_train, df_val,
                 seed=None):
 
     # Initialize Model FIRST to get the tokenizer (especially for ESMC)
-    model = GTDonorPredictor(
-        model_type=model_type,
-        checkpoint_name=checkpoint_name,
-        unimol_size=unimol_size,
-        donor_smiles=donor_smiles,
-        label2id=label2id,
-        train_unimol=train_unimol,
-        train_seq_encoder=train_seq_encoder,
-    ).to(device)
+    mlp_types = {"esm2_mlp", "saprot_mlp", "esmc_mlp"}
+    if model_type in mlp_types:
+        model = MLPPredictor(
+            checkpoint_name=checkpoint_name,
+            label2id=label2id,
+            model_type=model_type,
+            train_encoder=train_seq_encoder,
+            device=str(device),
+        ).to(device)
+    else:
+        model = GTDonorPredictor(
+            model_type=model_type,
+            checkpoint_name=checkpoint_name,
+            unimol_size=unimol_size,
+            donor_smiles=donor_smiles,
+            label2id=label2id,
+            train_unimol=train_unimol,
+            train_seq_encoder=train_seq_encoder,
+        ).to(device)
 
     # Determine Tokenizer, Collate Fn, and Sequence Column
-
-    if model_type == "saprot":
+    if model_type == "saprot_mlp":
+        seq_column = "SaProt Sequence"
+    elif model_type == "saprot":
         seq_column = "SaProt Sequence"
     else:
         seq_column = "Sequence"
 
-    if model_type == "esmc":
-        # For ESMC, the tokenizer is attached to the model (ESMC instance)
-        tokenizer = model.seq_encoder.tokenizer
+    if model_type in ("esmc", "esmc_mlp"):
+        tokenizer = model.seq_encoder.tokenizer if model_type == "esmc" else model.encoder.tokenizer
         collate_fn = get_collate_fn(tokenizer, is_esmc=True)
     else:
-        # For SaProt / ESM2, load from HF
         tokenizer = AutoTokenizer.from_pretrained(checkpoint_name)
-        collate_fn = None # Default collation
+        collate_fn = get_collate_fn(tokenizer, is_esmc=False)
 
     # Datasets + loaders
+    is_esmc = model_type in ("esmc", "esmc_mlp")
     ds_train = GTDonorDataset(df_train, seq_column,
                               tokenizer, max_seq_len,
-                              label2id, label_column="Donor",
-                              is_esmc=(model_type == "esmc")
+                              label2id, label_column="Nucleotide_Sugars",
+                              is_esmc=is_esmc,
                               )
     ds_val   = GTDonorDataset(df_val,   seq_column,
                               tokenizer, max_seq_len,
-                              label2id, label_column="Donor",
-                              is_esmc=(model_type == "esmc")
+                              label2id, label_column="Nucleotide_Sugars",
+                              is_esmc=is_esmc,
                               )
 
     generator = torch.Generator()
     if seed is not None:    
         generator.manual_seed(seed)
     
-    dl_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, generator=generator, collate_fn=collate_fn)
-    dl_val   = DataLoader(ds_val,   batch_size=12, collate_fn=collate_fn)
+    dl_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, generator=generator, collate_fn=collate_fn, num_workers=4, pin_memory=True, persistent_workers=True)
+    dl_val   = DataLoader(ds_val,   batch_size=12, collate_fn=collate_fn, num_workers=4, pin_memory=True, persistent_workers=True)
 
     if data_parallel:
         model = nn.DataParallel(model)
@@ -211,30 +221,6 @@ def train_model(df_train, df_val,
         all_labels = torch.cat(all_labels, dim=0)
         metrics = compute_multilabel_metrics(torch.sigmoid(all_logits), all_labels, label2id)
 
-        if df_exp is not None:
-            all_probs, all_labels = [], []
-            with torch.no_grad():
-                for batch in tqdm(dl_exp, desc="eval", total=len(dl_exp)):
-                    batch = {k:v.to(device) for k,v in batch.items()}
-                    labels = batch.pop("labels")
-                    output = model(**batch)
-                    if isinstance(output, tuple):
-                        logits = output[0]
-                    else:
-                        logits = output
-                    all_probs.append(torch.sigmoid(logits))
-                    all_labels.append(labels)
-            all_probs = torch.cat(all_probs, dim=0)
-            all_labels = torch.cat(all_labels, dim=0)
-            # check if there's any tp
-            all_predictions = (all_probs > 0.5).float()
-            tp = torch.sum(all_predictions * all_labels)
-            if tp > 0:
-                if data_parallel:
-                    model.module.save_checkpoint(os.path.join(checkpoint_dir, f"epoch_{epoch}_tp_{tp}.pth"))
-                else:
-                    model.save_checkpoint(os.path.join(checkpoint_dir, f"epoch_{epoch}_tp_{tp}.pth"))
-            wandb.log({"tp": tp}, step=epoch)
         scheduler.step(metrics["pr_auc_micro"])
         wandb.log({"val_" + k: v for k,v in metrics.items()}, step=epoch)
         
@@ -278,28 +264,27 @@ def eval_model(model, df_test, batch_size=128, output_name="final_results.json")
     else:
         real_model = model
 
-    if model_type == "saprot":
+    if model_type in ("saprot", "saprot_mlp"):
         seq_column = "SaProt Sequence"
     else:
         seq_column = "Sequence"
 
-    if model_type == "esmc":
+    if model_type in ("esmc", "esmc_mlp"):
         tokenizer = real_model.seq_encoder.tokenizer
         collate_fn = get_collate_fn(tokenizer, is_esmc=True)
     else:
-        tokenizer = AutoTokenizer.from_pretrained(model.checkpoint_name)
-        collate_fn = None
+        tokenizer = AutoTokenizer.from_pretrained(real_model.checkpoint_name)
+        collate_fn = get_collate_fn(tokenizer, is_esmc=False)
 
-
-    if model_type == "saprot":
+    if model_type in ("saprot", "saprot_mlp"):
         max_seq_len = df_test[seq_column].str.len().max() // 2
     else:
         max_seq_len = df_test[seq_column].str.len().max()
 
     ds_test  = GTDonorDataset(df_test,   seq_column,
                               tokenizer, max_seq_len,
-                              model.label2id, label_column="Nucleotide_Sugars",
-                              is_esmc=(model_type == "esmc")
+                              real_model.label2id, label_column="Nucleotide_Sugars",
+                              is_esmc=(model_type in ("esmc", "esmc_mlp")),
                               )
 
     dl_test = DataLoader(ds_test, batch_size=batch_size, collate_fn=collate_fn)

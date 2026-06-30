@@ -58,11 +58,10 @@ class GTDonorDataset(Dataset):
 
         if self.is_esmc:
             toks = encoding.tokenize_sequence(seq, self.tokenizer, add_special_tokens=True)
-            # For ESMC, we return sequence_tokens directly, not a dict with padding yet (collate handles it)
             ret = {"sequence_tokens": toks}
         else:
             toks = self.tokenizer(seq,
-                                  padding="max_length",
+                                  padding=False,
                                   truncation=True,
                                   max_length=self.max_seq_length+2,
                                   return_tensors="pt")
@@ -86,7 +85,6 @@ def get_collate_fn(tokenizer, is_esmc=False):
                 [item["sequence_tokens"] for item in batch],
                 constant_value=tokenizer.pad_token_id,
             )
-            
             if "labels" in batch[0] and batch[0]["labels"] is not None:
                 labels = torch.stack([item["labels"] for item in batch])
                 return {"sequence_tokens": sequence_tokens, "labels": labels}
@@ -94,4 +92,27 @@ def get_collate_fn(tokenizer, is_esmc=False):
                 return {"sequence_tokens": sequence_tokens}
         return collate
     else:
-        return None  # Default DataLoader collation works for dict of tensors
+        # Dynamic padding: pad to the longest sequence in each batch
+        pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
+        def collate(batch):
+            input_ids = [item["input_ids"] for item in batch]
+            max_len = max(x.size(0) for x in input_ids)
+            padded_ids = torch.stack([
+                torch.nn.functional.pad(x, (0, max_len - x.size(0)), value=pad_id)
+                for x in input_ids
+            ])
+            attention_mask = torch.stack([
+                torch.nn.functional.pad(torch.ones(x.size(0), dtype=torch.long), (0, max_len - x.size(0)), value=0)
+                for x in input_ids
+            ])
+            result = {"input_ids": padded_ids, "attention_mask": attention_mask}
+            if "token_type_ids" in batch[0]:
+                token_type_ids = [item["token_type_ids"] for item in batch]
+                result["token_type_ids"] = torch.stack([
+                    torch.nn.functional.pad(x, (0, max_len - x.size(0)), value=0)
+                    for x in token_type_ids
+                ])
+            if "labels" in batch[0] and batch[0]["labels"] is not None:
+                result["labels"] = torch.stack([item["labels"] for item in batch])
+            return result
+        return collate

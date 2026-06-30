@@ -1,0 +1,21 @@
+{
+    "label2id": {
+        "ADP-Glucose": 0,
+        "GDP-Fucose": 1,
+        "GDP-Mannose": 2,
+        "UDP-Galactose": 3,
+        "UDP-Glucose": 4,
+        "UDP-Glucuronic_Acid": 5,
+        "UDP-N-Acetylgalactosamine": 6,
+        "UDP-N-Acetylglucosamine": 7,
+        "UDP-Rhamnose": 8,
+        "UDP-Xylose": 9
+    },
+    "lr": 5e-05,
+	"ckpt_name": "westlake-repl/SaProt_650M_AF2",
+    "batch_size": 16,
+    "epochs": 50,
+    "max_seq_len": 2034,
+    "checkpoint_dir": "checkpoints/mlp-freeze_encoder/af2_mask70/gtb/SaProt_650M_AF2_20250925_013351",
+    "train_encoder": false
+}

@@ -1,4 +1,5 @@
 import os
+import json
 import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
@@ -67,6 +68,7 @@ class GTDonorPredictor(nn.Module):
         self.label2id = label2id
         self.id2label = {i: l for l, i in label2id.items()}
         self.train_unimol = train_unimol
+        self.train_seq_encoder = train_seq_encoder
         self.proj_dim = proj_dim
         self.device = device
 
@@ -308,7 +310,7 @@ class GTDonorPredictor(nn.Module):
         if os.path.isdir(checkpoint_path):
             checkpoint_path = os.path.join(checkpoint_path, 'state_dict.pth')
         checkpoint = torch.load(checkpoint_path)
-        self.load_state_dict(checkpoint["state_dict"])
+        self.load_state_dict(checkpoint["state_dict"], strict=False)
 
     @classmethod
     def from_pretrained(cls, model_type, checkpoint_path, device="cpu"):
@@ -316,7 +318,7 @@ class GTDonorPredictor(nn.Module):
             checkpoint_path = os.path.join(checkpoint_path, 'state_dict.pth')
         checkpoint = torch.load(checkpoint_path, map_location=device)
         params = checkpoint["params"]
-        
+
         # Backward compatibility for old checkpoints
         if "saprot_model_name" in params:
              params["checkpoint_name"] = params.pop("saprot_model_name")
@@ -327,8 +329,105 @@ class GTDonorPredictor(nn.Module):
 
         # checkpoint['params'] = params
         # torch.save(checkpoint, checkpoint_path)
-        
+
         print(params.keys(), model_type)
 
+        params.pop("model_type", None)
         model = cls(**params, model_type=model_type, checkpoint=checkpoint["state_dict"], device=device)
+        return model
+
+
+def _infer_mlp_model_type(ckpt_name: str) -> str:
+    n = ckpt_name.lower()
+    if "esmc" in n or n == "esmc_600m":
+        return "esmc_mlp"
+    if "saprot" in n:
+        return "saprot_mlp"
+    return "esm2_mlp"
+
+
+class MLPPredictor(nn.Module):
+    """Sequence encoder + MLP classifier (no UniMol donor processing).
+
+    Supports esm2_mlp, saprot_mlp (both HF EsmModel), and esmc_mlp (ESM SDK).
+    seq_encoder attribute mirrors GTDonorPredictor for consistency.
+    """
+
+    def __init__(self, checkpoint_name: str, label2id: Dict[str, int],
+                 model_type: str = "esm2_mlp",
+                 train_encoder: bool = False, device: str = "cpu"):
+        super().__init__()
+        self.model_type = model_type
+        self.checkpoint_name = checkpoint_name
+        self.label2id = label2id
+        self.device = device
+
+        if model_type == "esmc_mlp":
+            if ESMC is None:
+                raise ImportError("esm package required for esmc_mlp")
+            self.seq_encoder = ESMC.from_pretrained(checkpoint_name)
+            hidden = self.seq_encoder.embed.embedding_dim
+        else:
+            self.seq_encoder = EsmModel.from_pretrained(checkpoint_name)
+            hidden = self.seq_encoder.config.hidden_size
+
+        if not train_encoder:
+            for p in self.seq_encoder.parameters():
+                p.requires_grad = False
+
+        self.classifier = nn.Sequential(
+            nn.Dropout(0.1),
+            nn.Linear(hidden, hidden),
+            nn.Tanh(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden, len(label2id)),
+        )
+
+    def forward(self, input_ids=None, attention_mask=None, sequence_tokens=None, **kwargs):
+        if self.model_type == "esmc_mlp":
+            out = self.seq_encoder(sequence_tokens=sequence_tokens)
+            emb = out.embeddings.to(torch.float32)
+            mask = (sequence_tokens > 2).to(torch.float32).unsqueeze(-1)
+            x = (emb * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
+            return self.classifier(x), emb, None
+        elif self.model_type == "saprot_mlp":
+            out = self.seq_encoder(input_ids=input_ids, attention_mask=attention_mask)
+            emb = out[0]
+            mask = (input_ids > 2).to(torch.float32).unsqueeze(-1)
+            x = (emb * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
+            return self.classifier(x), emb, out[1]
+        else:  # esm2_mlp: CLS token
+            out = self.seq_encoder(input_ids=input_ids, attention_mask=attention_mask)
+            return self.classifier(out[0][:, 0, :]), out[0], out[1]
+
+    def save_checkpoint(self, save_path):
+        if os.path.isdir(save_path):
+            save_path = os.path.join(save_path, "state_dict.pt")
+        trainable = {n: p.detach().cpu() for n, p in self.named_parameters() if p.requires_grad}
+        torch.save(trainable, save_path)
+
+    def load_checkpoint(self, save_path):
+        if os.path.isdir(save_path):
+            save_path = os.path.join(save_path, "state_dict.pt")
+        self.load_state_dict(torch.load(save_path, map_location="cpu"), strict=False)
+
+    @classmethod
+    def from_pretrained(cls, checkpoint_path, device="cpu"):
+        if not os.path.isdir(checkpoint_path):
+            raise ValueError(f"checkpoint_path must be a directory, got: {checkpoint_path}")
+        with open(os.path.join(checkpoint_path, "config.json")) as f:
+            config = json.load(f)
+        ckpt_name = config["ckpt_name"]
+        model_type = config.get("model_type") or _infer_mlp_model_type(ckpt_name)
+        model = cls(
+            checkpoint_name=ckpt_name,
+            label2id=config["label2id"],
+            model_type=model_type,
+            train_encoder=config.get("train_encoder", False),
+            device=device,
+        )
+        model.load_state_dict(
+            torch.load(os.path.join(checkpoint_path, "state_dict.pt"), map_location=device),
+            strict=False,
+        )
         return model
